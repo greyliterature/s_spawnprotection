@@ -1,8 +1,17 @@
+-- do not change these values unless you know what you're doing or want to potentially break the script
 local s_spawnprotection_spawndelay_default_value = 5
 local s_spawnprotection_spawndelay_default_movement_value = 2
+local s_spawnprotection_spawndelay_default_switchweapon_value = 0.5
 --[[--------------------------------
     Rest
 ----------------------------------]]
+local function HasSpawnProt(ply)
+    local NW = ply:GetNW2Float("s_spawnprotection_expiration_date", -1)
+    if NW == -1 then return false end
+    local Expiration = ply.SpawnProtectionExpirationDate or NW
+    return Expiration > CurTime()
+end
+
 local function SpawnPrint(ply)
     print("Removed spawn prot for " .. ply:Nick())
     --debug.Trace()
@@ -59,7 +68,7 @@ if CLIENT then
     local PlayersOverlayed = {}
     hook.Add("PostPlayerDraw", "s_spawnprotection", function(ply)
         if PlayersOverlayed[ply] then return end
-        if (ply.SpawnProtectionExpirationDate or 0) < CurTime() and ply:GetNW2Float("s_spawnprotection_expiration_date", 0) < CurTime() then return end
+        if HasSpawnProt(ply) == false then return end
         PlayersOverlayed[ply] = true
         render.ModelMaterialOverride(Jellyfish)
         ply:DrawModel()
@@ -95,6 +104,18 @@ elseif SERVER then
         return
     end, "s_spawnprotection_spawndelay_movement")
 
+    local s_spawnprotection_spawndelay_switchweapon = CreateConVar("s_spawnprotection_spawndelay_switchweapon", s_spawnprotection_spawndelay_default_switchweapon_value, FCVAR_ARCHIVE, "How long spawn protection lasts after switching weapons", 0)
+    local s_spawnprotection_spawndelay_switchweapon_value = s_spawnprotection_spawndelay_switchweapon:GetInt()
+    SetGlobal2Float("s_spawnprotection_spawndelay_switchweapon", s_spawnprotection_spawndelay_switchweapon_value)
+    cvars.AddChangeCallback("s_spawnprotection_spawndelay_switchweapon", function(_, old, new)
+        s_spawnprotection_spawndelay_switchweapon_value = tonumber(new)
+        SetGlobal2Float("s_spawnprotection_spawndelay_switchweapon", s_spawnprotection_spawndelay_switchweapon_value)
+        return
+    end, "s_spawnprotection_spawndelay_switchweapon")
+
+    --[[--------------------------------
+        Server specific stuff (can't really predict these)
+    ----------------------------------]]
     hook.Add("PlayerInitialSpawn", "s_spawnprotection", function(ply, _)
         local SpawnDelay = GetGlobal2Float("s_spawnprotection_spawndelay", s_spawnprotection_spawndelay_default_value)
         local ExpirationDate = CurTime() + SpawnDelay
@@ -108,6 +129,20 @@ elseif SERVER then
             return true
         end
     end)
+
+    hook.Add("OnPhysgunPickup", "s_spawnprotection", function(ply, ent)
+        if HasSpawnProt(ply) == false then return end
+        SpawnPrint(ply)
+        ply.SpawnProtectionExpirationDate = nil
+        ply:SetNW2Float("s_spawnprotection_expiration_date", -1) -- basically nilling it
+    end)
+
+    hook.Add("GravGunOnPickedUp", "s_spawnprotection", function(ply, ent)
+        if HasSpawnProt(ply) == false then return end
+        SpawnPrint(ply)
+        ply.SpawnProtectionExpirationDate = nil
+        ply:SetNW2Float("s_spawnprotection_expiration_date", -1) -- basically nilling it
+    end)
 end
 
 JustSpawned = {}
@@ -120,6 +155,10 @@ hook.Add("player_spawn", "s_spawnprotection", function(data)
     ply.SpawnProtectionExpirationDate = ExpirationDate
     ply.FadingOut = nil
     ply.MovementDecay = nil
+    if SERVER then -- unnil the physgunpickup 
+        ply:SetNW2Float("s_spawnprotection_expiration_date", 0)
+    end
+
     timer.Create("s_spawnprotection_spawndelay" .. data.userid, SpawnDelay, 1, function()
         if not IsValid(ply) then return end
         if not ply.SpawnProtectionExpirationDate then return end
@@ -140,17 +179,19 @@ hook.Add("player_hurt", "s_spawnprotection", function(data)
     end
 end)
 
-local function HasSpawnProt(ply)
-    if not ply.SpawnProtectionExpirationDate then return false end
-    if ply.SpawnProtectionExpirationDate < CurTime() then return false end
-end
+local AttackAnims = {
+    [PLAYERANIMEVENT_ATTACK_SECONDARY] = true,
+    [PLAYERANIMEVENT_ATTACK_PRIMARY] = true,
+    [PLAYERANIMEVENT_RELOAD] = true, -- crossbow doesnt run attack_primary but it does reload instantly, so this is a workaround
+}
 
 hook.Add("DoAnimationEvent", "s_spawnprotection", function(ply, event, data)
     -- handle attack anims
     if HasSpawnProt(ply) == false then return end
-    if event == PLAYERANIMEVENT_ATTACK_PRIMARY or event == PLAYERANIMEVENT_ATTACK_SECONDARY and not ply.FadingOut then
+    if AttackAnims[event] then
         SpawnPrint(ply)
         ply.FadingOut = true
+        ply:SetNW2Float("s_spawnprotection_expiration_date", -1)
         ply.SpawnProtectionExpirationDate = nil
     end
 end)
@@ -163,9 +204,12 @@ hook.Add("PlayerSwitchWeapon", "s_spawnprotection", function(ply, _, _)
     end
 
     if HasSpawnProt(ply) == false then return end
-    SpawnPrint(ply)
+    local ExpirationDate = CurTime() + GetGlobal2Float("s_spawnprotection_spawndelay_switchweapon", s_spawnprotection_spawndelay_switchweapon_value)
+    print("Decaying " .. ply:Nick() .. " in " .. ExpirationDate - CurTime() .. " seconds")
     ply.FadingOut = true
-    ply.SpawnProtectionExpirationDate = nil
+    ply.SpawnProtectionExpirationDate = ExpirationDate
+    ply:SetNW2Float("s_spawnprotection_expiration_date", ExpirationDate)
+    timer.Adjust("s_spawnprotection_spawndelay" .. ply:UserID(), ExpirationDate - CurTime())
     return
 end)
 
@@ -185,7 +229,7 @@ hook.Add("TranslateActivity", "s_spawnprotection", function(ply, act)
 
     if MoveActivitys[act] and not ply.MovementDecay then
         local ExpirationDate = CurTime() + GetGlobal2Float("s_spawnprotection_spawndelay_movement", s_spawnprotection_spawndelay_movement_value)
-        ExpirationDate = math.Clamp(ExpirationDate, 0, ply.SpawnProtectionExpirationDate)
+        ExpirationDate = math.Clamp(ExpirationDate, 0, ply.SpawnProtectionExpirationDate or ply:GetNW2Float("s_spawnprotection_expiration_date", 0))
         print("Decaying " .. ply:Nick() .. " in " .. ExpirationDate - CurTime() .. " seconds")
         ply.MovementDecay = true
         ply.SpawnProtectionExpirationDate = ExpirationDate
