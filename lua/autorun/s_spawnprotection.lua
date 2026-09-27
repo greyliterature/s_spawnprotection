@@ -202,11 +202,11 @@ local JustSpawned = {}
 gameevent.Listen("player_spawn")
 hook.Add("player_spawn", "s_spawnprotection", function(data)
     local ply = Player(data.userid)
-    if ply:DeservesSpawnProtection() == false then return end
     if CLIENT and not IsValid(ply) then -- initial spawns
         return
     end
 
+    if ply:DeservesSpawnProtection() == false then return end
     JustSpawned[ply] = CurTime()
     local SpawnDelay = GetGlobal2Float("s_spawnprotection_spawndelay", s_spawnprotection_spawndelay_default_value)
     local ExpirationDate = CurTime() + SpawnDelay
