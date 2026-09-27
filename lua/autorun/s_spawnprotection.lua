@@ -11,11 +11,16 @@ local function SpawnPrint(ply)
     --debug.Trace()
 end
 
+local Words = {
+    -- We use words like honor, code, loyalty!
+    ["DEFAULT"] = 0, -- just default for nw2floats, don't really use it currently
+    ["EXPIRED"] = -1, -- the nilled 
+    ["EARNED"] = -2, -- deserves spawnprot 
+}
+
 local function HasSpawnProt(ply)
     local ExpirationDate = ply:GetNW2Float("s_spawnprotection_expiration_date", 0)
-    if ExpirationDate == -1 then -- the nilled 
-        return false
-    end
+    if ExpirationDate == Words["EXPIRED"] then return false end
     return ExpirationDate > CurTime()
 end
 
@@ -24,13 +29,21 @@ function PLAYERMETA:SetExpirationDate(ExpirationDate)
     self:SetNW2Float("s_spawnprotection_expiration_date", ExpirationDate)
 end
 
+function PLAYERMETA:RewardSpawnProtection()
+    self:SetNW2Float("s_spawnprotection_expiration_date", Words["EARNED"])
+end
+
+function PLAYERMETA:DeservesSpawnProtection()
+    return self:GetNW2Float("s_spawnprotection_expiration_date", Words["EARNED"]) == Words["EARNED"]
+end
+
 function PLAYERMETA:GetExpirationDate()
     return self:GetNW2Float("s_spawnprotection_expiration_date", 0)
 end
 
 function PLAYERMETA:RemoveSpawnProtection()
     SpawnPrint(self)
-    self:SetNW2Float("s_spawnprotection_expiration_date", -1)
+    self:SetNW2Float("s_spawnprotection_expiration_date", Words["EXPIRED"])
 end
 
 if CLIENT then
@@ -178,12 +191,18 @@ elseif SERVER then
         if HasSpawnProt(ply) == false then return end
         ply:RemoveSpawnProtection()
     end)
+
+    hook.Add("PlayerDeath", "s_spawnprotection", function(victim, _, attacker)
+        victim:RewardSpawnProtection() -- Thanks Phatso https://github.com/CFC-Servers/cfc_spawn_protection/blob/61d822f7013f35984118093a90a05ef08d5500e6/lua/autorun/server/sv_spawn_protection.lua#L185
+        return
+    end)
 end
 
 local JustSpawned = {}
 gameevent.Listen("player_spawn")
 hook.Add("player_spawn", "s_spawnprotection", function(data)
     local ply = Player(data.userid)
+    if ply:DeservesSpawnProtection() == false then return end
     if CLIENT and not IsValid(ply) then -- initial spawns
         return
     end
