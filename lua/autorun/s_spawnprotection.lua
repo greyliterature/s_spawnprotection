@@ -2,6 +2,7 @@
 local s_spawnprotection_spawndelay_default_value = 5
 local s_spawnprotection_spawndelay_default_movement_value = 2
 local s_spawnprotection_spawndelay_default_switchweapon_value = 0.5
+local InitialSpawns = nil
 --[[--------------------------------
     Rest
 ----------------------------------]]
@@ -28,6 +29,7 @@ function PLAYERMETA:GetExpirationDate()
 end
 
 function PLAYERMETA:RemoveSpawnProtection()
+    SpawnPrint(self)
     self:SetNW2Float("s_spawnprotection_expiration_date", -1)
 end
 
@@ -119,13 +121,44 @@ elseif SERVER then
         return
     end, "s_spawnprotection_spawndelay_switchweapon")
 
+    local s_spawnprotection_spawndelay_initialspawn = CreateConVar("s_spawnprotection_spawndelay_initialspawn", "300", FCVAR_ARCHIVE, "How long spawn protection lasts for newly joining players", 0)
+    local s_spawnprotection_spawndelay_initialspawn_value = s_spawnprotection_spawndelay_initialspawn:GetInt()
+    -- this doesn't need to be predicted with a default value, hopefully
+    SetGlobal2Float("s_spawnprotection_spawndelay_initialspawn", s_spawnprotection_spawndelay_initialspawn_value)
+    cvars.AddChangeCallback("s_spawnprotection_spawndelay_initialspawn", function(_, old, new)
+        s_spawnprotection_spawndelay_initialspawn_value = tonumber(new)
+        SetGlobal2Float("s_spawnprotection_spawndelay_initialspawn", s_spawnprotection_spawndelay_initialspawn_value)
+        return
+    end, "s_spawnprotection_spawndelay_initialspawn")
+
     --[[--------------------------------
         Server specific stuff (can't really predict these)
     ----------------------------------]]
+    --[[
     hook.Add("PlayerInitialSpawn", "s_spawnprotection", function(ply, _)
-        local SpawnDelay = GetGlobal2Float("s_spawnprotection_spawndelay", s_spawnprotection_spawndelay_default_value)
+        ply.InitialSpawn = true
+        local SpawnDelay = s_spawnprotection_spawndelay_initialspawn_value
         local ExpirationDate = CurTime() + SpawnDelay
         ply:SetExpirationDate(ExpirationDate)
+        timer.Create("s_spawnprotection_spawndelay" .. ply:UserID(), SpawnDelay, 1, function()
+            if not IsValid(ply) then return end
+            if HasSpawnProt(ply) == false then return end
+            SpawnPrint(ply)
+            ply:RemoveSpawnProtection()
+        end)
+    end)
+    --]]
+    InitialSpawns = {}
+    gameevent.Listen("player_connect_client")
+    hook.Add("player_connect_client", "s_spawnprotection", function(data)
+        InitialSpawns[data.networkid] = CurTime()
+        return
+    end)
+
+    gameevent.Listen("player_disconnect")
+    hook.Add("player_disconnect", "player_disconnect_example", function(data)
+        InitialSpawns[data.networkid] = nil
+        return
     end)
 
     hook.Add("EntityTakeDamage", "s_spawnprotection", function(target, dmg)
@@ -137,13 +170,11 @@ elseif SERVER then
 
     hook.Add("OnPhysgunPickup", "s_spawnprotection", function(ply, ent)
         if HasSpawnProt(ply) == false then return end
-        SpawnPrint(ply)
         ply:RemoveSpawnProtection()
     end)
 
     hook.Add("GravGunOnPickedUp", "s_spawnprotection", function(ply, ent)
         if HasSpawnProt(ply) == false then return end
-        SpawnPrint(ply)
         ply:RemoveSpawnProtection()
     end)
 end
@@ -152,6 +183,10 @@ local JustSpawned = {}
 gameevent.Listen("player_spawn")
 hook.Add("player_spawn", "s_spawnprotection", function(data)
     local ply = Player(data.userid)
+    if CLIENT and not IsValid(ply) then -- initial spawns
+        return
+    end
+
     JustSpawned[ply] = CurTime()
     local SpawnDelay = GetGlobal2Float("s_spawnprotection_spawndelay", s_spawnprotection_spawndelay_default_value)
     local ExpirationDate = CurTime() + SpawnDelay
@@ -161,9 +196,7 @@ hook.Add("player_spawn", "s_spawnprotection", function(data)
     timer.Create("s_spawnprotection_spawndelay" .. data.userid, SpawnDelay, 1, function()
         if not IsValid(ply) then return end
         if HasSpawnProt(ply) == false then return end
-        SpawnPrint(ply)
         ply:RemoveSpawnProtection()
-        return
     end)
 end)
 
@@ -173,7 +206,6 @@ hook.Add("player_hurt", "s_spawnprotection", function(data)
     if ply:Health() > 0 or ply:Alive() == true then return end
     if HasSpawnProt(ply) then
         timer.Remove("s_spawnprotection_spawndelay" .. data.userid)
-        SpawnPrint(ply)
         ply:RemoveSpawnProtection()
     end
 end)
@@ -188,15 +220,19 @@ hook.Add("DoAnimationEvent", "s_spawnprotection", function(ply, event, data)
     -- handle attack anims
     if HasSpawnProt(ply) == false then return end
     if AttackAnims[event] then
-        SpawnPrint(ply)
         ply.FadingOut = true
         ply:RemoveSpawnProtection()
     end
 end)
 
 local JustSpawnedThreshold = 0.1
+local InitialSpawnedThreshold = 2
 hook.Add("PlayerSwitchWeapon", "s_spawnprotection", function(ply, _, _)
-    firstprint = true
+    if InitialSpawns and InitialSpawns[ply:SteamID()] then
+        if CurTime() < InitialSpawns[ply:SteamID()] + InitialSpawnedThreshold then return end
+        InitialSpawns[ply:SteamID()] = nil
+    end
+
     if JustSpawned[ply] and CurTime() < JustSpawned[ply] + JustSpawnedThreshold then -- a player runs PlayerSwitchWeapon multiple times on server when spawning, but not on client, this syncs it better
         return
     end
@@ -220,6 +256,11 @@ local MoveActivitys = {
 
 hook.Add("TranslateActivity", "s_spawnprotection", function(ply, act)
     -- the wiki says "Isn't called when CalcMainActivity returns a valid override sequence id", i hope this doesnt break with pac or anything
+    if InitialSpawns and InitialSpawns[ply:SteamID()] then
+        if CurTime() < InitialSpawns[ply:SteamID()] + InitialSpawnedThreshold then return end
+        InitialSpawns[ply:UserID()] = nil
+    end
+
     if HasSpawnProt(ply) == false then return end
     if JustSpawned[ply] and CurTime() < JustSpawned[ply] + JustSpawnedThreshold then -- the player runs ACT_MP_JUMP on spawn, so there has to be a window
         return
