@@ -37,6 +37,7 @@ if CLIENT then
     local Vignette = Material("vgui/white_additive_vignette")
     local color_blue = Color(0, 255, 255, 100)
     local color_faded = color_blue:Copy()
+    color_faded.a = HasSpawnProt(LocalPlayer()) and color_blue.a or 0
     local function ExpDecay(a, b, decay, dt) -- from styledstrike glide github, cant get link because writing by hand
         return b + (a - b) * math.exp(-decay * dt)
     end
