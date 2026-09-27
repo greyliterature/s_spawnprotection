@@ -5,16 +5,30 @@ local s_spawnprotection_spawndelay_default_switchweapon_value = 0.5
 --[[--------------------------------
     Rest
 ----------------------------------]]
-local function HasSpawnProt(ply)
-    local NW = ply:GetNW2Float("s_spawnprotection_expiration_date", -1)
-    if NW == -1 then return false end
-    local Expiration = ply.SpawnProtectionExpirationDate or NW
-    return Expiration > CurTime()
-end
-
 local function SpawnPrint(ply)
     print("Removed spawn prot for " .. ply:Nick())
     --debug.Trace()
+end
+
+local function HasSpawnProt(ply)
+    local ExpirationDate = ply:GetNW2Float("s_spawnprotection_expiration_date", 0)
+    if ExpirationDate == -1 then -- the nilled 
+        return false
+    end
+    return ExpirationDate > CurTime()
+end
+
+local PLAYERMETA = FindMetaTable("Player")
+function PLAYERMETA:SetExpirationDate(ExpirationDate)
+    self:SetNW2Float("s_spawnprotection_expiration_date", ExpirationDate)
+end
+
+function PLAYERMETA:GetExpirationDate()
+    return self:GetNW2Float("s_spawnprotection_expiration_date", 0)
+end
+
+function PLAYERMETA:RemoveSpawnProtection()
+    self:SetNW2Float("s_spawnprotection_expiration_date", -1)
 end
 
 if CLIENT then
@@ -26,23 +40,16 @@ if CLIENT then
     end
 
     hook.Add("HUDPaint", "s_spawnprotection", function()
-        local ShouldCare = false
         local ply = LocalPlayer()
-        if ply:GetNW2Float("s_spawnprotection_expiration_date", 0) > CurTime() then
-            ShouldCare = true
+        if HasSpawnProt(ply) == false then
             ply.FadingOut = true
+        elseif ply.FadingOut == nil then
+            color_faded.a = color_blue.a
         end
 
-        if ply.FadingOut then ShouldCare = true end
-        if ply.SpawnProtectionExpirationDate and ShouldCare == false then ShouldCare = true end
-        if ply.SpawnProtectionExpirationDate and ply.SpawnProtectionExpirationDate > CurTime() then --
-            ply.FadingOut = true
-        end
-
-        if ply:Health() <= 0 or ply:Alive() == false then ShouldCare = false end
-        if ply:ShouldDrawLocalPlayer() == true then ShouldCare = false end
-        if ShouldCare == false then return end
-        local timeleft = (ply.SpawnProtectionExpirationDate or ply:GetNW2Float("s_spawnprotection_expiration_date", 0)) - CurTime()
+        if ply:Health() <= 0 or ply:Alive() == false then return end
+        if ply:ShouldDrawLocalPlayer() == true then return end
+        local timeleft = ply:GetExpirationDate() - CurTime()
         local col = color_faded
         surface.SetDrawColor(col)
         surface.SetMaterial(Vignette)
@@ -77,8 +84,7 @@ if CLIENT then
     end)
 
     hook.Add("ScalePlayerDamage", "s_spawnprotection", function(ply, _, _)
-        local ExpirationDate = ply.SpawnProtectionExpirationDate or ply:GetNW2Float("s_spawnprotection_expiration_date", 0)
-        if ExpirationDate < CurTime() then --
+        if HasSpawnProt(ply) then --
             return true
         end
     end)
@@ -119,13 +125,12 @@ elseif SERVER then
     hook.Add("PlayerInitialSpawn", "s_spawnprotection", function(ply, _)
         local SpawnDelay = GetGlobal2Float("s_spawnprotection_spawndelay", s_spawnprotection_spawndelay_default_value)
         local ExpirationDate = CurTime() + SpawnDelay
-        ply:SetNW2Float("s_spawnprotection_expiration_date", ExpirationDate)
+        ply:SetExpirationDate(ExpirationDate)
     end)
 
     hook.Add("EntityTakeDamage", "s_spawnprotection", function(target, dmg)
         if not target:IsPlayer() then return end
-        if not target.SpawnProtectionExpirationDate then return end
-        if target.SpawnProtectionExpirationDate > CurTime() then --
+        if HasSpawnProt(target) == true then --
             return true
         end
     end)
@@ -133,37 +138,31 @@ elseif SERVER then
     hook.Add("OnPhysgunPickup", "s_spawnprotection", function(ply, ent)
         if HasSpawnProt(ply) == false then return end
         SpawnPrint(ply)
-        ply.SpawnProtectionExpirationDate = nil
-        ply:SetNW2Float("s_spawnprotection_expiration_date", -1) -- basically nilling it
+        ply:RemoveSpawnProtection()
     end)
 
     hook.Add("GravGunOnPickedUp", "s_spawnprotection", function(ply, ent)
         if HasSpawnProt(ply) == false then return end
         SpawnPrint(ply)
-        ply.SpawnProtectionExpirationDate = nil
-        ply:SetNW2Float("s_spawnprotection_expiration_date", -1) -- basically nilling it
+        ply:RemoveSpawnProtection()
     end)
 end
 
-JustSpawned = {}
+local JustSpawned = {}
 gameevent.Listen("player_spawn")
 hook.Add("player_spawn", "s_spawnprotection", function(data)
     local ply = Player(data.userid)
     JustSpawned[ply] = CurTime()
     local SpawnDelay = GetGlobal2Float("s_spawnprotection_spawndelay", s_spawnprotection_spawndelay_default_value)
     local ExpirationDate = CurTime() + SpawnDelay
-    ply.SpawnProtectionExpirationDate = ExpirationDate
+    ply:SetExpirationDate(ExpirationDate)
     ply.FadingOut = nil
     ply.MovementDecay = nil
-    if SERVER then -- unnil the physgunpickup 
-        ply:SetNW2Float("s_spawnprotection_expiration_date", 0)
-    end
-
     timer.Create("s_spawnprotection_spawndelay" .. data.userid, SpawnDelay, 1, function()
         if not IsValid(ply) then return end
-        if not ply.SpawnProtectionExpirationDate then return end
+        if HasSpawnProt(ply) == false then return end
         SpawnPrint(ply)
-        ply.SpawnProtectionExpirationDate = nil
+        ply:RemoveSpawnProtection()
         return
     end)
 end)
@@ -172,10 +171,10 @@ gameevent.Listen("player_hurt") -- entity_killed isnt reliable enough
 hook.Add("player_hurt", "s_spawnprotection", function(data)
     local ply = Player(data.userid)
     if ply:Health() > 0 or ply:Alive() == true then return end
-    if ply.SpawnProtectionExpirationDate then
+    if HasSpawnProt(ply) then
         timer.Remove("s_spawnprotection_spawndelay" .. data.userid)
         SpawnPrint(ply)
-        ply.SpawnProtectionExpirationDate = nil
+        ply:RemoveSpawnProtection()
     end
 end)
 
@@ -191,8 +190,7 @@ hook.Add("DoAnimationEvent", "s_spawnprotection", function(ply, event, data)
     if AttackAnims[event] then
         SpawnPrint(ply)
         ply.FadingOut = true
-        ply:SetNW2Float("s_spawnprotection_expiration_date", -1)
-        ply.SpawnProtectionExpirationDate = nil
+        ply:RemoveSpawnProtection()
     end
 end)
 
@@ -205,10 +203,10 @@ hook.Add("PlayerSwitchWeapon", "s_spawnprotection", function(ply, _, _)
 
     if HasSpawnProt(ply) == false then return end
     local ExpirationDate = CurTime() + GetGlobal2Float("s_spawnprotection_spawndelay_switchweapon", s_spawnprotection_spawndelay_switchweapon_value)
+    ExpirationDate = math.Clamp(ExpirationDate, 0, ply:GetExpirationDate())
     print("Decaying " .. ply:Nick() .. " in " .. ExpirationDate - CurTime() .. " seconds")
     ply.FadingOut = true
-    ply.SpawnProtectionExpirationDate = ExpirationDate
-    ply:SetNW2Float("s_spawnprotection_expiration_date", ExpirationDate)
+    ply:SetExpirationDate(ExpirationDate)
     timer.Adjust("s_spawnprotection_spawndelay" .. ply:UserID(), ExpirationDate - CurTime())
     return
 end)
@@ -229,11 +227,10 @@ hook.Add("TranslateActivity", "s_spawnprotection", function(ply, act)
 
     if MoveActivitys[act] and not ply.MovementDecay then
         local ExpirationDate = CurTime() + GetGlobal2Float("s_spawnprotection_spawndelay_movement", s_spawnprotection_spawndelay_movement_value)
-        ExpirationDate = math.Clamp(ExpirationDate, 0, ply.SpawnProtectionExpirationDate or ply:GetNW2Float("s_spawnprotection_expiration_date", 0))
+        ExpirationDate = math.Clamp(ExpirationDate, 0, ply:GetExpirationDate())
         print("Decaying " .. ply:Nick() .. " in " .. ExpirationDate - CurTime() .. " seconds")
         ply.MovementDecay = true
-        ply.SpawnProtectionExpirationDate = ExpirationDate
-        ply:SetNW2Float("s_spawnprotection_expiration_date", ExpirationDate)
+        ply:SetExpirationDate(ExpirationDate)
         timer.Adjust("s_spawnprotection_spawndelay" .. ply:UserID(), ExpirationDate - CurTime())
     end
 end)
