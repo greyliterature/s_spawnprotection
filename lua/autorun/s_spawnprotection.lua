@@ -453,6 +453,7 @@ end)
     Hooks
 ----------------------------------]]
 if SERVER then
+    --[[
     -- just debug / example stuff
     hook.Add("s_spawnprotection_expiration_date_changed", "s_spawnprotection_debug", function(ply, ExpirationDate)
         print("Set expiration for " .. ply:Nick() .. " to " .. ExpirationDate - CurTime() .. " seconds from now")
@@ -473,7 +474,7 @@ if SERVER then
         print("Removed spawn protection for " .. ply:Nick())
         return
     end)
-
+    --]]
     --
     -- accounting for buildmode addons
     hook.Add("s_spawnprotection_deserved", "s_spawnprotection_debug", function(ply)
