@@ -1,6 +1,6 @@
 # Spawn protection
 I made this because I thought the other spawn protection scripts / addons didn't follow good visual design.  <br/>
-The HUD fades out when spawn protection gets removed, which I didn't see any others doing. <br/>
+The HUD also fades out when spawn protection gets removed, which I didn't see any others doing <br/>
 <br/>
 # Features 
 ## Players:
@@ -56,6 +56,7 @@ Run every time a player dies when they are rewarded spawn protection for the nex
 ```
 ### s_spawnprotection_deserved (ply)
 Queried every time a player dies to ask if the player should be rewarded spawnprotection when they respawn. <br/>
+You should be returning false here if a player is in buildmode. <br/>
 ```lua
     hook.Add("s_spawnprotection_deserved", "s_spawnprotection_debug", function(ply)
         print(ply:Nick() .. " will not earn spawn protection next life")
