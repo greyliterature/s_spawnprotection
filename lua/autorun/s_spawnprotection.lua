@@ -262,6 +262,7 @@ elseif SERVER then
     end)
 
     hook.Add("PlayerInitialSpawn", "s_spawnprotection", function(ply, _)
+        if ply:DeservesSpawnProtection() == false then return end
         ply:SetNW2Bool("s_spawnprotection_initial_spawn", true)
         ply:SetExpirationDate(CurTime() + GetGlobal2Float("s_spawnprotection_spawndelay_initialspawn", s_spawnprotection_spawndelay_default_initialspawn_value))
         return
@@ -478,7 +479,12 @@ if SERVER then
     --
     -- accounting for buildmode addons
     hook.Add("s_spawnprotection_deserved", "s_spawnprotection_debug", function(ply)
+        -- i don't care enough to make this not a bunch of if statements right now 
         if ply:GetNWBool("_Kyle_Buildmode", false) then --
+            return false
+        end
+
+        if ply:HasGodmode() == true then --
             return false
         end
     end)
