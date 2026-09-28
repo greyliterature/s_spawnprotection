@@ -33,7 +33,7 @@ I added a couple hooks that I thought would be useful for outside developers. Ma
 <br/>
 All of the hooks are serverside. I did not see a use for any clientside hooks, so I did not add any. <br/>
 Hooks: <br/>
-### s_spawnprotection_expiration_date_changed (ply, ExpirationDate)
+### s_spawnprotection_expiration_date_changed (ply, ExpirationDate, reason)
 Run every time a player's expiration date for their spawn protection is changed (or set). <br/>
 Where: <br/>
 ```
@@ -41,8 +41,8 @@ ExpirationDate = CurTime() + SpawnDelay <br/>
 SpawnDelay = ExpirationDate - CurTime() <br/>
 ```
 ```lua
-    hook.Add("s_spawnprotection_expiration_date_changed", "s_spawnprotection_debug", function(ply, ExpirationDate)
-        print("Set expiration for " .. ply:Nick() .. " to " .. ExpirationDate - CurTime() .. " seconds from now")
+    hook.Add("s_spawnprotection_expiration_date_changed", "s_spawnprotection_debug", function(ply, ExpirationDate, reason)
+        print("Set expiration for " .. ply:Nick() .. " to " .. ExpirationDate - CurTime() .. " seconds from now, because " .. reason)
         return
     end)
 ```
