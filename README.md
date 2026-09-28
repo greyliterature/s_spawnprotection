@@ -1,6 +1,6 @@
 # Spawn protection
 I made this because I thought the other spawn protection scripts / addons didn't follow good visual design.  <br/>
-The HUD fades out when spawn protection gets removed, which I didn't see any others doing <br/>
+The HUD fades out when spawn protection gets removed, which I didn't see any others doing. <br/>
 <br/>
 # Features 
 ## Players:
