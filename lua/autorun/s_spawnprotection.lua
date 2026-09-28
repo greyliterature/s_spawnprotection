@@ -3,47 +3,77 @@ local s_spawnprotection_spawndelay_default_value = 5
 local s_spawnprotection_spawndelay_default_movement_value = 2
 local s_spawnprotection_spawndelay_default_switchweapon_value = 0.5
 local InitialSpawns = nil
+local s_spawnprotection_spawndelay_notifyplayers_value = nil
 --[[--------------------------------
     Rest
 ----------------------------------]]
-local function SpawnPrint(ply)
-    print("Removed spawn prot for " .. ply:Nick())
-    --debug.Trace()
-end
-
 local Words = {
     -- We use words like honor, code, loyalty!
     ["DEFAULT"] = 0, -- just default for nw2floats, don't really use it currently
     ["EXPIRED"] = -1, -- the nilled 
-    ["EARNED"] = -2, -- deserves spawnprot 
 }
 
-local function HasSpawnProt(ply)
-    local ExpirationDate = ply:GetNW2Float("s_spawnprotection_expiration_date", 0)
-    if ExpirationDate == Words["EXPIRED"] then return false end
-    return ExpirationDate > CurTime()
-end
+-- Chat prints (cfc does something like this)
+local Notifications = {
+    ["PICKED_UP"] = "Spawn protection revoked because you used an object",
+    ["PHYSGUN_PICKED_UP"] = "Spawn protection revoked because you physgunned an object",
+    ["GRAVGUN_PICKED_UP"] = "Spawn protection revoked because you gravgunned an object",
+    ["SWITCHED_WEAPON"] = "Spawn protection will be removed because you swapped weapons",
+    ["PLAYER_ATTACKED"] = "Spawn protection revoked because you fired", -- wording on this is a bit awkward
+    ["PLAYER_MOVED"] = "Spawn protection will be removed because you moved",
+}
 
+--[[--------------------------------
+        Meta functions
+    ----------------------------------]]
 local PLAYERMETA = FindMetaTable("Player")
-function PLAYERMETA:SetExpirationDate(ExpirationDate)
+function PLAYERMETA:SetExpirationDate(ExpirationDate, NOTIFYCODE)
+    if NOTIFYCODE and s_spawnprotection_spawndelay_notifyplayers_value == 1 then --
+        self:ColoredChatPrint(NOTIFYCODE)
+    end
+
+    hook.Run("s_spawnprotection_expiration_date_changed", self, ExpirationDate)
     self:SetNW2Float("s_spawnprotection_expiration_date", ExpirationDate)
 end
 
-function PLAYERMETA:RewardSpawnProtection()
-    self:SetNW2Float("s_spawnprotection_expiration_date", Words["EARNED"])
+function PLAYERMETA:DeservesSpawnProtection()
+    local DeservesSpawnProtection = hook.Run("s_spawnprotection_deserved", self)
+    if DeservesSpawnProtection == false then return false end
+    --local NW2 = self:GetNW2Float("s_spawnprotection_expiration_date", Words["EARNED"])
+    --return NW2 ~= Words["UNDESERVED"]
+    return true
 end
 
-function PLAYERMETA:DeservesSpawnProtection()
-    return self:GetNW2Float("s_spawnprotection_expiration_date", Words["EARNED"]) == Words["EARNED"]
+function PLAYERMETA:RewardSpawnProtection()
+    --if self:DeservesSpawnProtection() == false then return end
+    hook.Run("s_spawnprotection_rewarded", self)
+    self:SetNW2Float("s_spawnprotection_expiration_date", Words["EARNED"])
 end
 
 function PLAYERMETA:GetExpirationDate()
     return self:GetNW2Float("s_spawnprotection_expiration_date", 0)
 end
 
-function PLAYERMETA:RemoveSpawnProtection()
-    SpawnPrint(self)
+if SERVER then util.AddNetworkString("s_coloredchatprint") end
+function PLAYERMETA:ColoredChatPrint(NOTIFYCODE)
+    net.Start("s_coloredchatprint")
+    net.WriteString(NOTIFYCODE) -- we have a shared static table, so the client can just read off of that
+    net.Send(self)
+end
+
+function PLAYERMETA:RemoveSpawnProtection(NOTIFYCODE)
+    if SERVER and s_spawnprotection_spawndelay_notifyplayers_value == 1 then --
+        self:ColoredChatPrint(NOTIFYCODE)
+    end
+
+    hook.Run("s_spawnprotection_removed", self)
     self:SetNW2Float("s_spawnprotection_expiration_date", Words["EXPIRED"])
+end
+
+local function HasSpawnProt(ply)
+    local ExpirationDate = ply:GetNW2Float("s_spawnprotection_expiration_date", 0)
+    if ExpirationDate == Words["EXPIRED"] then return false end
+    return ExpirationDate > CurTime()
 end
 
 if CLIENT then
@@ -104,6 +134,11 @@ if CLIENT then
             return true
         end
     end)
+
+    net.Receive("s_coloredchatprint", function(_, _)
+        local NOTIFYCODE = net.ReadString()
+        chat.AddText(Notifications[NOTIFYCODE])
+    end)
 elseif SERVER then
     --[[--------------------------------
         Convars
@@ -145,6 +180,16 @@ elseif SERVER then
         return
     end, "s_spawnprotection_spawndelay_initialspawn")
 
+    local s_spawnprotection_spawndelay_notifyplayers = CreateConVar("s_spawnprotection_spawndelay_notifyplayers", "0", FCVAR_ARCHIVE, "Whether or no to inform players why their spawn protection was revoked", 0)
+    s_spawnprotection_spawndelay_notifyplayers_value = s_spawnprotection_spawndelay_notifyplayers:GetInt()
+    -- this doesn't need to be predicted with a default value, hopefully
+    SetGlobal2Float("s_spawnprotection_spawndelay_notifyplayers", s_spawnprotection_spawndelay_notifyplayers_value)
+    cvars.AddChangeCallback("s_spawnprotection_spawndelay_initialspawn", function(_, old, new)
+        s_spawnprotection_spawndelay_notifyplayers_value = tonumber(new)
+        SetGlobal2Float("s_spawnprotection_spawndelay_notifyplayers", s_spawnprotection_spawndelay_notifyplayers_value)
+        return
+    end, "s_spawnprotection_spawndelay_notifyplayers")
+
     --[[--------------------------------
         Server specific stuff (can't really predict these)
     ----------------------------------]]
@@ -175,6 +220,11 @@ elseif SERVER then
         return
     end)
 
+    hook.Add("PlayerInitialSpawn", "s_spawnprotection", function(ply, _)
+        ply:SetExpirationDate(CurTime() + GetGlobal2Float("s_spawnprotection_spawndelay_initialspawn", s_spawnprotection_spawndelay_default_initialspawn_value))
+        return
+    end)
+
     hook.Add("EntityTakeDamage", "s_spawnprotection", function(target, dmg)
         if not target:IsPlayer() then return end
         if HasSpawnProt(target) == true then --
@@ -184,17 +234,39 @@ elseif SERVER then
 
     hook.Add("OnPhysgunPickup", "s_spawnprotection", function(ply, ent)
         if HasSpawnProt(ply) == false then return end
-        ply:RemoveSpawnProtection()
+        ply:RemoveSpawnProtection("PHYSGUN_PICKED_UP")
     end)
 
     hook.Add("GravGunOnPickedUp", "s_spawnprotection", function(ply, ent)
         if HasSpawnProt(ply) == false then return end
-        ply:RemoveSpawnProtection()
+        ply:RemoveSpawnProtection("GRAVGUN_PICKED_UP")
     end)
 
     hook.Add("PlayerDeath", "s_spawnprotection", function(victim, _, attacker)
+        if victim:DeservesSpawnProtection() == false then return end
         victim:RewardSpawnProtection() -- Thanks Phatso https://github.com/CFC-Servers/cfc_spawn_protection/blob/61d822f7013f35984118093a90a05ef08d5500e6/lua/autorun/server/sv_spawn_protection.lua#L185
         return
+    end)
+
+    local UsedThisLife = {}
+    hook.Add("PlayerSpawn", "s_spawnprotection", function(ply, _)
+        UsedThisLife[ply] = nil
+        return
+    end)
+
+    hook.Add("PlayerUse", "s_spawnprotection", function(ply, ent)
+        if UsedThisLife[ply] then
+            -- i feel like allowing players to spam this hook constantly is 
+            -- a bad idea, so this should rate limit them  
+            return
+        end
+
+        if HasSpawnProt(ply) == false then --
+            return
+        end
+
+        UsedThisLife[ply] = true
+        ply:RemoveSpawnProtection()
     end)
 end
 
@@ -230,6 +302,8 @@ hook.Add("player_hurt", "s_spawnprotection", function(data)
     end
 end)
 
+--[[
+-- better to just do this all in startcommand
 local AttackAnims = {
     [PLAYERANIMEVENT_ATTACK_SECONDARY] = true,
     [PLAYERANIMEVENT_ATTACK_PRIMARY] = true,
@@ -244,12 +318,15 @@ hook.Add("DoAnimationEvent", "s_spawnprotection", function(ply, event, data)
         ply:RemoveSpawnProtection()
     end
 end)
-
+--]]
 local JustSpawnedThreshold = 0.1
 local InitialSpawnedThreshold = 2
 hook.Add("PlayerSwitchWeapon", "s_spawnprotection", function(ply, _, _)
     if InitialSpawns and InitialSpawns[ply:SteamID()] then
-        if CurTime() < InitialSpawns[ply:SteamID()] + InitialSpawnedThreshold then return end
+        if CurTime() < InitialSpawns[ply:SteamID()] + InitialSpawnedThreshold then --
+            return
+        end
+
         InitialSpawns[ply:SteamID()] = nil
     end
 
@@ -260,13 +337,14 @@ hook.Add("PlayerSwitchWeapon", "s_spawnprotection", function(ply, _, _)
     if HasSpawnProt(ply) == false then return end
     local ExpirationDate = CurTime() + GetGlobal2Float("s_spawnprotection_spawndelay_switchweapon", s_spawnprotection_spawndelay_switchweapon_value)
     ExpirationDate = math.Clamp(ExpirationDate, 0, ply:GetExpirationDate())
-    print("Decaying " .. ply:Nick() .. " in " .. ExpirationDate - CurTime() .. " seconds")
+    --print("Decaying " .. ply:Nick() .. " in " .. ExpirationDate - CurTime() .. " seconds")
     ply.FadingOut = true
-    ply:SetExpirationDate(ExpirationDate)
+    ply:SetExpirationDate(ExpirationDate, "SWITCHED_WEAPON")
     timer.Adjust("s_spawnprotection_spawndelay" .. ply:UserID(), ExpirationDate - CurTime())
     return
 end)
 
+--[[
 local MoveActivitys = {
     [ACT_MP_RUN] = true,
     [ACT_MP_WALK] = true,
@@ -295,3 +373,61 @@ hook.Add("TranslateActivity", "s_spawnprotection", function(ply, act)
         timer.Adjust("s_spawnprotection_spawndelay" .. ply:UserID(), ExpirationDate - CurTime())
     end
 end)
+--]]
+local MovementKeys = IN_FORWARD + IN_BACK + IN_MOVERIGHT + IN_MOVELEFT
+local AttackKeys = IN_ATTACK + IN_ATTACK2
+local WeaponWhitelist = {
+    ["weapon_physgun"] = true,
+}
+
+hook.Add("StartCommand", "s_spawnprotection", function(ply, ucmd)
+    -- track movement and attacks, translateactivity and doanimationevent was a bad idea apparently
+    if bit.band(ucmd:GetButtons(), bit.bor(MovementKeys)) ~= 0 and HasSpawnProt(ply) == true and not ply.MovementDecay then --
+        local ExpirationDate = CurTime() + GetGlobal2Float("s_spawnprotection_spawndelay_movement", s_spawnprotection_spawndelay_movement_value)
+        ExpirationDate = math.Clamp(ExpirationDate, 0, ply:GetExpirationDate())
+        --print("Decaying " .. ply:Nick() .. " in " .. ExpirationDate - CurTime() .. " seconds")
+        ply.MovementDecay = true
+        ply:SetExpirationDate(ExpirationDate, "PLAYER_MOVED")
+        timer.Adjust("s_spawnprotection_spawndelay" .. ply:UserID(), ExpirationDate - CurTime())
+    elseif bit.band(ucmd:GetButtons(), bit.bor(AttackKeys)) ~= 0 and HasSpawnProt(ply) == true then
+        local weap = ply:GetActiveWeapon()
+        if IsValid(weap) and WeaponWhitelist[weap:GetClass()] then return end
+        ply.FadingOut = true
+        ply:RemoveSpawnProtection("PLAYER_ATTACKED")
+    end
+end)
+
+--[[--------------------------------
+    Hooks
+----------------------------------]]
+if SERVER then
+    --[[
+    -- just debug / example stuff
+    hook.Add("s_spawnprotection_expiration_date_changed", "s_spawnprotection_debug", function(ply, ExpirationDate)
+        print("Set expiration for " .. ply:Nick() .. " to " .. ExpirationDate - CurTime() .. " seconds from now")
+        return
+    end)
+
+    hook.Add("s_spawnprotection_rewarded", "s_spawnprotection_debug", function(ply)
+        print("Rewarded " .. ply:Nick() .. " with spawn protection next life")
+        return
+    end)
+
+    hook.Add("s_spawnprotection_deserved", "s_spawnprotection_debug", function(ply)
+        print(ply:Nick() .. " will not earn spawn protection next life")
+        return false --
+    end)
+
+    hook.Add("s_spawnprotection_removed", "s_spawnprotection_debug", function(ply)
+        print("Removed spawn protection for " .. ply:Nick())
+        return
+    end)
+    --]]
+    -- accounting for buildmode addons
+    hook.Add("s_spawnprotection_deserved", "s_spawnprotection_debug", function(ply)
+        --
+        if ply:GetNWBool("_Kyle_Buildmode", false) then --
+            return false
+        end
+    end)
+end
