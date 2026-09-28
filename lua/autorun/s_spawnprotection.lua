@@ -484,7 +484,7 @@ if SERVER then
             return false
         end
 
-        if ply:HasGodmode() == true then --
+        if ply:HasGodMode() == true then --
             return false
         end
     end)
