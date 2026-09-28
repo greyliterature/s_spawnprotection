@@ -87,7 +87,7 @@ if CLIENT then
         color_faded.a = HasSpawnProt(LocalPlayer()) and color_main.a or 0
     end
 
-    local s_spawnprotection_color = CreateClientConVar("s_spawnprotection_color", "0 255 255 100", true, false, "Color for spawn protection. Only the HUD, use s_spawnprotection_jellyfish for player material.")
+    local s_spawnprotection_color = CreateClientConVar("s_spawnprotection_color", "0 255 255 100", true, false, "Color for spawn protection. Only changes the HUD, use s_spawnprotection_jellyfish for player material.")
     SetSpawnColor(string.ToColor(s_spawnprotection_color:GetString()))
     cvars.AddChangeCallback("s_spawnprotection_color", function(_, old, new)
         SetSpawnColor(string.ToColor(new))
@@ -148,7 +148,7 @@ if CLIENT then
         return unpack(string.Split(jellyfish, " "))
     end
 
-    local s_spawnprotection_jellyfish = CreateClientConVar("s_spawnprotection_jellyfish", "vgui/black effects/advisor_fx_003 1", true, false, "Player spawn protection material, [1] = string basetexture, [2] = string gradienttexture, [3] = float pulserate")
+    local s_spawnprotection_jellyfish = CreateClientConVar("s_spawnprotection_jellyfish", "vgui/black effects/advisor_fx_003 1", true, false, "Sets spawn protection material of other players, \"basetexture gradienttexture pulserate\"")
     local str = s_spawnprotection_jellyfish:GetString()
     if str == "DEFAULT" then str = "vgui/black effects/advisor_fx_003 1" end
     MakeJellyFish(JellyfishToVarArgs(str))
@@ -192,7 +192,7 @@ elseif SERVER then
         return
     end, "s_spawnprotection_spawndelay")
 
-    local s_spawnprotection_spawndelay_movement = CreateConVar("s_spawnprotection_spawndelay_movement", s_spawnprotection_spawndelay_default_movement_value, FCVAR_ARCHIVE, "How long spawn protection lasts after moving", 0)
+    local s_spawnprotection_spawndelay_movement = CreateConVar("s_spawnprotection_spawndelay_movement", s_spawnprotection_spawndelay_default_movement_value, FCVAR_ARCHIVE, "How long spawn protection lasts after a player moves", 0)
     local s_spawnprotection_spawndelay_movement_value = s_spawnprotection_spawndelay_movement:GetInt()
     SetGlobal2Float("s_spawnprotection_spawndelay_movement", s_spawnprotection_spawndelay_movement_value)
     cvars.AddChangeCallback("s_spawnprotection_spawndelay_movement", function(_, old, new)
@@ -210,7 +210,7 @@ elseif SERVER then
         return
     end, "s_spawnprotection_spawndelay_switchweapon")
 
-    local s_spawnprotection_spawndelay_initialspawn = CreateConVar("s_spawnprotection_spawndelay_initialspawn", "300", FCVAR_ARCHIVE, "How long spawn protection lasts for newly joining players", 0)
+    local s_spawnprotection_spawndelay_initialspawn = CreateConVar("s_spawnprotection_spawndelay_initialspawn", "300", FCVAR_ARCHIVE, "How long spawn protection lasts for a newly joining player", 0)
     local s_spawnprotection_spawndelay_initialspawn_value = s_spawnprotection_spawndelay_initialspawn:GetInt()
     -- this doesn't need to be predicted with a default value, hopefully
     SetGlobal2Float("s_spawnprotection_spawndelay_initialspawn", s_spawnprotection_spawndelay_initialspawn_value)
@@ -220,7 +220,7 @@ elseif SERVER then
         return
     end, "s_spawnprotection_spawndelay_initialspawn")
 
-    local s_spawnprotection_spawndelay_notifyplayers = CreateConVar("s_spawnprotection_spawndelay_notifyplayers", "0", FCVAR_ARCHIVE, "Whether or no to inform players why their spawn protection was revoked", 0)
+    local s_spawnprotection_spawndelay_notifyplayers = CreateConVar("s_spawnprotection_spawndelay_notifyplayers", "0", FCVAR_ARCHIVE, "Whether or not to inform players why their spawn protection was revoked", 0)
     s_spawnprotection_spawndelay_notifyplayers_value = s_spawnprotection_spawndelay_notifyplayers:GetInt()
     -- this doesn't need to be predicted with a default value, hopefully
     SetGlobal2Float("s_spawnprotection_spawndelay_notifyplayers", s_spawnprotection_spawndelay_notifyplayers_value)
@@ -469,7 +469,7 @@ if SERVER then
             return false
         end
 
-        if ply:HasGodMode() == true then --
+        if ply:HasGodMode() == true or ply.ULXHasGod == true then --
             return false
         end
     end)
