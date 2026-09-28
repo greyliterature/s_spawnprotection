@@ -78,9 +78,22 @@ end
 
 if CLIENT then
     local Vignette = Material("vgui/white_additive_vignette")
-    local color_blue = Color(0, 255, 255, 100)
-    local color_faded = color_blue:Copy()
-    color_faded.a = HasSpawnProt(LocalPlayer()) and color_blue.a or 0
+    local color_main = Color(0, 255, 255, 100)
+    local color_faded = color_main:Copy()
+    color_faded.a = HasSpawnProt(LocalPlayer()) and color_main.a or 0
+    local function SetSpawnColor(color)
+        color_main = (IsColor(color) and color) or ColorRand()
+        color_faded = color:Copy()
+        color_faded.a = HasSpawnProt(LocalPlayer()) and color_main.a or 0
+    end
+
+    local s_spawnprotection_color = CreateClientConVar("s_spawnprotection_color", "0 255 255 100", true, false, "Color for spawn protection. Only the HUD, sadly.")
+    SetSpawnColor(string.ToColor(s_spawnprotection_color:GetString()))
+    cvars.AddChangeCallback("s_spawnprotection_color", function(_, old, new)
+        SetSpawnColor(string.ToColor(new))
+        return
+    end, "s_spawnprotection_color")
+
     local function ExpDecay(a, b, decay, dt) -- from styledstrike glide github, cant get link because writing by hand
         return b + (a - b) * math.exp(-decay * dt)
     end
@@ -90,7 +103,7 @@ if CLIENT then
         if HasSpawnProt(ply) == false then
             ply.FadingOut = true
         elseif ply.FadingOut == nil then
-            color_faded.a = color_blue.a
+            color_faded.a = color_main.a
         end
 
         if ply:Health() <= 0 or ply:Alive() == false then return end
@@ -101,9 +114,9 @@ if CLIENT then
         surface.SetMaterial(Vignette)
         surface.DrawTexturedRect(0, 0, ScrW(), ScrH())
         if ply.FadingOut == true then
-            local target = (timeleft <= 0.5) and 0 or color_blue.a
+            local target = (timeleft <= 0.5) and 0 or color_main.a
             color_faded.a = ExpDecay(color_faded.a, target, 7, FrameTime())
-            color_faded.a = math.Clamp(color_faded.a, 0, color_blue.a)
+            color_faded.a = math.Clamp(color_faded.a, 0, color_main.a)
             if color_faded.a <= 0.1 then ply.FadingOut = nil end
         end
     end)
