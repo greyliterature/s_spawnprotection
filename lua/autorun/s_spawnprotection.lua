@@ -294,11 +294,11 @@ elseif SERVER then
             return
         end
 
+        UsedThisLife[ply] = true
         if HasSpawnProt(ply) == false then --
             return
         end
 
-        UsedThisLife[ply] = true
         ply:RemoveSpawnProtection()
     end)
 end
