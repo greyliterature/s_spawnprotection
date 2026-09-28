@@ -274,7 +274,11 @@ elseif SERVER then
     hook.Add("PlayerDeath", "s_spawnprotection", function(victim, _, attacker)
         if victim:DeservesSpawnProtection() == false then return end
         victim:RewardSpawnProtection() -- Thanks Phatso https://github.com/CFC-Servers/cfc_spawn_protection/blob/61d822f7013f35984118093a90a05ef08d5500e6/lua/autorun/server/sv_spawn_protection.lua#L185
-        return
+    end)
+
+    hook.Add("PlayerSilentDeath", "s_spawnprotection", function(victim, _, attacker)
+        if victim:DeservesSpawnProtection() == false then return end
+        victim:RewardSpawnProtection() -- Thanks Phatso https://github.com/CFC-Servers/cfc_spawn_protection/blob/61d822f7013f35984118093a90a05ef08d5500e6/lua/autorun/server/sv_spawn_protection.lua#L185
     end)
 
     local UsedThisLife = {}
