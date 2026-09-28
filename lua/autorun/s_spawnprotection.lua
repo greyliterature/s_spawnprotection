@@ -71,6 +71,7 @@ function PLAYERMETA:RemoveSpawnProtection(NOTIFYCODE)
 end
 
 local function HasSpawnProt(ply)
+    if not IsValid(ply) then return end
     local ExpirationDate = ply:GetNW2Float("s_spawnprotection_expiration_date", 0)
     if ExpirationDate == Words["EXPIRED"] then return false end
     return ExpirationDate > CurTime()
@@ -87,7 +88,7 @@ if CLIENT then
         color_faded.a = HasSpawnProt(LocalPlayer()) and color_main.a or 0
     end
 
-    local s_spawnprotection_color = CreateClientConVar("s_spawnprotection_color", "0 255 255 100", true, false, "Color for spawn protection. Only the HUD, sadly.")
+    local s_spawnprotection_color = CreateClientConVar("s_spawnprotection_color", "0 255 255 100", true, false, "Color for spawn protection. Only the HUD, use s_spawnprotection_jellyfish for player material.")
     SetSpawnColor(string.ToColor(s_spawnprotection_color:GetString()))
     cvars.AddChangeCallback("s_spawnprotection_color", function(_, old, new)
         SetSpawnColor(string.ToColor(new))
@@ -121,15 +122,40 @@ if CLIENT then
         end
     end)
 
-    local Jellyfish = CreateMaterial("s_spawnprotection_jellyfish_" .. math.random(1, 9999), "JellyFish", {
-        ["$basetexture"] = "vgui/black",
-        ["$gradienttexture"] = "effects/advisor_fx_003",
-        ["$model"] = 1,
-        ["$pulserate"] = 1,
-        ["$translucent"] = 1,
-        ["$vertexalpha"] = 1,
-        ["$vertexcolor"] = 1
-    })
+    local Jellyfish = nil
+    local function MakeJellyFish(basetexture, gradienttexture, pulserate)
+        if not basetexture or not gradienttexture or not pulserate then -- the players will be dumb, but hopefully this helps
+            print("Missing arguments")
+            return
+        end
+
+        if not tonumber(pulserate) then
+            print("Pulse rate is not a float")
+            return
+        end
+
+        Jellyfish = CreateMaterial("s_spawnprotection_jellyfish_" .. math.random(1, 99999999999999), "JellyFish", {
+            ["$basetexture"] = basetexture,
+            ["$gradienttexture"] = gradienttexture,
+            ["$model"] = 1,
+            ["$pulserate"] = tonumber(pulserate),
+            ["$translucent"] = 1,
+            ["$vertexalpha"] = 1,
+            ["$vertexcolor"] = 1
+        })
+    end
+
+    local function JellyfishToVarArgs(jellyfish)
+        return unpack(string.Split(jellyfish, " "))
+    end
+
+    local s_spawnprotection_jellyfish = CreateClientConVar("s_spawnprotection_jellyfish", "vgui/black effects/advisor_fx_003 1", true, false, "Player spawn protection material, [1] = string basetexture, [2] = string gradienttexture, [3] = float pulserate")
+    MakeJellyFish(JellyfishToVarArgs(s_spawnprotection_jellyfish:GetString()))
+    cvars.AddChangeCallback("s_spawnprotection_jellyfish", function(_, old, new)
+        if new == "DEFAULT" then new = "vgui/black effects/advisor_fx_003 1" end
+        MakeJellyFish(JellyfishToVarArgs(new))
+        return
+    end, "s_spawnprotection_jellyfish")
 
     local PlayersOverlayed = {}
     hook.Add("PostPlayerDraw", "s_spawnprotection", function(ply)
@@ -234,6 +260,7 @@ elseif SERVER then
     end)
 
     hook.Add("PlayerInitialSpawn", "s_spawnprotection", function(ply, _)
+        ply:SetNW2Float("s_spawnprotection_initial_spawn", CurTime())
         ply:SetExpirationDate(CurTime() + GetGlobal2Float("s_spawnprotection_spawndelay_initialspawn", s_spawnprotection_spawndelay_default_initialspawn_value))
         return
     end)
@@ -335,8 +362,8 @@ end)
 local JustSpawnedThreshold = 0.1
 local InitialSpawnedThreshold = 2
 hook.Add("PlayerSwitchWeapon", "s_spawnprotection", function(ply, _, _)
-    if InitialSpawns and InitialSpawns[ply:SteamID()] then
-        if CurTime() < InitialSpawns[ply:SteamID()] + InitialSpawnedThreshold then --
+    if InitialSpawns and InitialSpawns[ply:SteamID()] or ply:GetNW2Float("s_spawnprotection_initial_spawn", -99) ~= -99 then
+        if CurTime() < (InitialSpawns[ply:SteamID()] or ply:GetNW2Float("s_spawnprotection_initial_spawn", -99)) + InitialSpawnedThreshold then --
             return
         end
 
