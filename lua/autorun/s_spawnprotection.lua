@@ -2,7 +2,6 @@
 local s_spawnprotection_spawndelay_default_value = 5
 local s_spawnprotection_spawndelay_default_movement_value = 2
 local s_spawnprotection_spawndelay_default_switchweapon_value = 0.5
-local InitialSpawns = nil
 local s_spawnprotection_spawndelay_notifyplayers_value = nil
 --[[--------------------------------
     Rest
@@ -248,22 +247,9 @@ elseif SERVER then
         end)
     end)
     --]]
-    InitialSpawns = {}
-    gameevent.Listen("player_connect_client")
-    hook.Add("player_connect_client", "s_spawnprotection", function(data)
-        InitialSpawns[data.networkid] = CurTime()
-        return
-    end)
-
-    gameevent.Listen("player_disconnect")
-    hook.Add("player_disconnect", "player_disconnect_example", function(data)
-        InitialSpawns[data.networkid] = nil
-        return
-    end)
-
     hook.Add("PlayerInitialSpawn", "s_spawnprotection", function(ply, _)
         if ply:DeservesSpawnProtection() == false then return end
-        ply:SetNW2Bool("s_spawnprotection_initial_spawn", true)
+        ply:SetNW2Float("s_spawnprotection_initial_spawn", CurTime())
         ply:SetExpirationDate(CurTime() + GetGlobal2Float("s_spawnprotection_spawndelay_initialspawn", s_spawnprotection_spawndelay_default_initialspawn_value))
         return
     end)
@@ -314,10 +300,16 @@ elseif SERVER then
 end
 
 local JustSpawned = {}
+local JustSpawnedThreshold = 0.1
+local InitialSpawnedThreshold = 2
 gameevent.Listen("player_spawn")
 hook.Add("player_spawn", "s_spawnprotection", function(data)
     local ply = Player(data.userid)
     if CLIENT and not IsValid(ply) then -- initial spawns
+        return
+    end
+
+    if CurTime() < ply:GetNW2Float("s_spawnprotection_initial_spawn", -99) + InitialSpawnedThreshold then --
         return
     end
 
@@ -362,16 +354,9 @@ hook.Add("DoAnimationEvent", "s_spawnprotection", function(ply, event, data)
     end
 end)
 --]]
-local JustSpawnedThreshold = 0.1
-local InitialSpawnedThreshold = 2
 hook.Add("PlayerSwitchWeapon", "s_spawnprotection", function(ply, _, _)
-    if InitialSpawns and InitialSpawns[ply:SteamID()] or ply:GetNW2Bool("s_spawnprotection_initial_spawn", false) == true then
-        if CurTime() < ((InitialSpawns and InitialSpawns[ply:SteamID()]) or ply:GetNW2Float("s_spawnprotection_initial_spawn", -99)) + InitialSpawnedThreshold then --
-            return
-        end
-
-        if InitialSpawns then InitialSpawns[ply:SteamID()] = nil end
-        ply:SetNW2Bool("s_spawnprotection_initial_spawn", false)
+    if CurTime() < ply:GetNW2Float("s_spawnprotection_initial_spawn", -99) + InitialSpawnedThreshold then --
+        return
     end
 
     if JustSpawned[ply] and CurTime() < JustSpawned[ply] + JustSpawnedThreshold then -- a player runs PlayerSwitchWeapon multiple times on server when spawning, but not on client, this syncs it better
