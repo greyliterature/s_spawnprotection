@@ -366,7 +366,7 @@ local JustSpawnedThreshold = 0.1
 local InitialSpawnedThreshold = 2
 hook.Add("PlayerSwitchWeapon", "s_spawnprotection", function(ply, _, _)
     if InitialSpawns and InitialSpawns[ply:SteamID()] or ply:GetNW2Bool("s_spawnprotection_initial_spawn", false) == true then
-        if CurTime() < ((IntialSpawns and InitialSpawns[ply:SteamID()]) or ply:GetNW2Float("s_spawnprotection_initial_spawn", -99)) + InitialSpawnedThreshold then --
+        if CurTime() < ((InitialSpawns and InitialSpawns[ply:SteamID()]) or ply:GetNW2Float("s_spawnprotection_initial_spawn", -99)) + InitialSpawnedThreshold then --
             return
         end
 
