@@ -150,7 +150,9 @@ if CLIENT then
     end
 
     local s_spawnprotection_jellyfish = CreateClientConVar("s_spawnprotection_jellyfish", "vgui/black effects/advisor_fx_003 1", true, false, "Player spawn protection material, [1] = string basetexture, [2] = string gradienttexture, [3] = float pulserate")
-    MakeJellyFish(JellyfishToVarArgs(s_spawnprotection_jellyfish:GetString()))
+    local str = s_spawnprotection_jellyfish:GetString()
+    if str == "DEFAULT" then str = "vgui/black effects/advisor_fx_003 1" end
+    MakeJellyFish(JellyfishToVarArgs(str))
     cvars.AddChangeCallback("s_spawnprotection_jellyfish", function(_, old, new)
         if new == "DEFAULT" then new = "vgui/black effects/advisor_fx_003 1" end
         MakeJellyFish(JellyfishToVarArgs(new))
@@ -260,7 +262,7 @@ elseif SERVER then
     end)
 
     hook.Add("PlayerInitialSpawn", "s_spawnprotection", function(ply, _)
-        ply:SetNW2Float("s_spawnprotection_initial_spawn", CurTime())
+        ply:SetNW2Bool("s_spawnprotection_initial_spawn", true)
         ply:SetExpirationDate(CurTime() + GetGlobal2Float("s_spawnprotection_spawndelay_initialspawn", s_spawnprotection_spawndelay_default_initialspawn_value))
         return
     end)
@@ -362,12 +364,13 @@ end)
 local JustSpawnedThreshold = 0.1
 local InitialSpawnedThreshold = 2
 hook.Add("PlayerSwitchWeapon", "s_spawnprotection", function(ply, _, _)
-    if InitialSpawns and InitialSpawns[ply:SteamID()] or ply:GetNW2Float("s_spawnprotection_initial_spawn", -99) ~= -99 then
-        if CurTime() < (InitialSpawns[ply:SteamID()] or ply:GetNW2Float("s_spawnprotection_initial_spawn", -99)) + InitialSpawnedThreshold then --
+    if InitialSpawns and InitialSpawns[ply:SteamID()] or ply:GetNW2Bool("s_spawnprotection_initial_spawn", false) == true then
+        if CurTime() < ((IntialSpawns and InitialSpawns[ply:SteamID()]) or ply:GetNW2Float("s_spawnprotection_initial_spawn", -99)) + InitialSpawnedThreshold then --
             return
         end
 
-        InitialSpawns[ply:SteamID()] = nil
+        if InitialSpawns then InitialSpawns[ply:SteamID()] = nil end
+        ply:SetNW2Bool("s_spawnprotection_initial_spawn", false)
     end
 
     if JustSpawned[ply] and CurTime() < JustSpawned[ply] + JustSpawnedThreshold then -- a player runs PlayerSwitchWeapon multiple times on server when spawning, but not on client, this syncs it better
@@ -450,7 +453,6 @@ end)
     Hooks
 ----------------------------------]]
 if SERVER then
-    --[[
     -- just debug / example stuff
     hook.Add("s_spawnprotection_expiration_date_changed", "s_spawnprotection_debug", function(ply, ExpirationDate)
         print("Set expiration for " .. ply:Nick() .. " to " .. ExpirationDate - CurTime() .. " seconds from now")
@@ -471,7 +473,7 @@ if SERVER then
         print("Removed spawn protection for " .. ply:Nick())
         return
     end)
-    --]]
+
     --
     -- accounting for buildmode addons
     hook.Add("s_spawnprotection_deserved", "s_spawnprotection_debug", function(ply)
