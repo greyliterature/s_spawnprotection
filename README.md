@@ -16,7 +16,7 @@ s_spawnprotection_jellyfish "sprites/blueglow1 effects/com_shield002b 0.5" <br/>
 Currently, the addon only accounts for Kyle's buildmode ULX godmode, and GMod godmode. Make a issue post with the buildmode addon you use (or pull request this) so that I can add it. <br/>
 There are a lot of buildmode addons so I can't account for all of them, so I will (eventually) add your requests. <br/>
 <br/>
-I added a few convars for controlling different player scenarios: <br/>
+I also added a few convars for controlling different player scenarios: <br/>
 ### "s_spawnprotection_spawndelay" (def. 5)
 How long spawn protection lasts  <br/>
 ### "s_spawnprotection_spawndelay_initialspawn" (def. 300)
