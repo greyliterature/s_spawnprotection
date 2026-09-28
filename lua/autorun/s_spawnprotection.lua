@@ -387,14 +387,23 @@ hook.Add("TranslateActivity", "s_spawnprotection", function(ply, act)
     end
 end)
 --]]
-local MovementKeys = IN_FORWARD + IN_BACK + IN_MOVERIGHT + IN_MOVELEFT
-local AttackKeys = IN_ATTACK + IN_ATTACK2
+local MovementKeys = IN_FORWARD + IN_BACK + IN_MOVERIGHT + IN_MOVELEFT -- + IN_JUMP -- IN_JUMP is a bad idea, sets off right on spawn
+local AttackKeys = IN_ATTACK + IN_ATTACK2 + IN_RELOAD + IN_GRENADE1 + IN_GRENADE2 -- surely IN_GRENADE does something in some addon?
 local WeaponWhitelist = {
+    -- some of the same stuff as cfc's
     ["weapon_physgun"] = true,
+    ["gmod_camera"] = true,
+    ["none"] = true,
+    ["laserpointer"] = true,
 }
 
+local JustSpawnedThreshold_StartCommand = 0.1 -- give player change to player let go of the attack key after spawning
 hook.Add("StartCommand", "s_spawnprotection", function(ply, ucmd)
     -- track movement and attacks, translateactivity and doanimationevent was a bad idea apparently
+    if JustSpawned[ply] and CurTime() < JustSpawned[ply] + JustSpawnedThreshold_StartCommand then --  too early
+        return
+    end
+
     if bit.band(ucmd:GetButtons(), bit.bor(MovementKeys)) ~= 0 and HasSpawnProt(ply) == true and not ply.MovementDecay then --
         local ExpirationDate = CurTime() + GetGlobal2Float("s_spawnprotection_spawndelay_movement", s_spawnprotection_spawndelay_movement_value)
         ExpirationDate = math.Clamp(ExpirationDate, 0, ply:GetExpirationDate())
@@ -436,9 +445,9 @@ if SERVER then
         return
     end)
     --]]
+    --
     -- accounting for buildmode addons
     hook.Add("s_spawnprotection_deserved", "s_spawnprotection_debug", function(ply)
-        --
         if ply:GetNWBool("_Kyle_Buildmode", false) then --
             return false
         end
