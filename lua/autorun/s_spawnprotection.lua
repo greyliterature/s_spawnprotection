@@ -24,15 +24,15 @@ local Notifications = {
 
 --[[--------------------------------
         Meta functions
-    ----------------------------------]]
+----------------------------------]]
 local PLAYERMETA = FindMetaTable("Player")
 function PLAYERMETA:SetExpirationDate(ExpirationDate, NOTIFYCODE)
-    if NOTIFYCODE and s_spawnprotection_spawndelay_notifyplayers_value == 1 then --
+    if NOTIFYCODE and Notifications[NOTIFYCODE] and s_spawnprotection_spawndelay_notifyplayers_value == 1 then --
         self:ColoredChatPrint(NOTIFYCODE)
     end
 
-    hook.Run("s_spawnprotection_expiration_date_changed", self, ExpirationDate)
-    self:SetNW2Float("s_spawnprotection_expiration_date", ExpirationDate)
+    hook.Run("s_spawnprotection_expiration_date_changed", self, ExpirationDate, NOTIFYCODE or "")
+    self:SetNWFloat("s_spawnprotection_expiration_date", ExpirationDate)
 end
 
 function PLAYERMETA:DeservesSpawnProtection()
@@ -46,11 +46,11 @@ end
 function PLAYERMETA:RewardSpawnProtection()
     --if self:DeservesSpawnProtection() == false then return end
     hook.Run("s_spawnprotection_rewarded", self)
-    self:SetNW2Float("s_spawnprotection_expiration_date", Words["EARNED"])
+    self:SetNWFloat("s_spawnprotection_expiration_date", Words["EARNED"])
 end
 
 function PLAYERMETA:GetExpirationDate()
-    return self:GetNW2Float("s_spawnprotection_expiration_date", 0)
+    return self:GetNWFloat("s_spawnprotection_expiration_date", 0)
 end
 
 if SERVER then util.AddNetworkString("s_coloredchatprint") end
@@ -66,12 +66,12 @@ function PLAYERMETA:RemoveSpawnProtection(NOTIFYCODE)
     end
 
     hook.Run("s_spawnprotection_removed", self)
-    self:SetNW2Float("s_spawnprotection_expiration_date", Words["EXPIRED"])
+    self:SetNWFloat("s_spawnprotection_expiration_date", Words["EXPIRED"])
 end
 
 local function HasSpawnProt(ply)
     if not IsValid(ply) then return end
-    local ExpirationDate = ply:GetNW2Float("s_spawnprotection_expiration_date", 0)
+    local ExpirationDate = ply:GetNWFloat("s_spawnprotection_expiration_date", 0)
     if ExpirationDate == Words["EXPIRED"] then return false end
     return ExpirationDate > CurTime()
 end
@@ -249,8 +249,8 @@ elseif SERVER then
     --]]
     hook.Add("PlayerInitialSpawn", "s_spawnprotection", function(ply, _)
         if ply:DeservesSpawnProtection() == false then return end
-        ply:SetNW2Float("s_spawnprotection_initial_spawn", CurTime())
-        ply:SetExpirationDate(CurTime() + GetGlobal2Float("s_spawnprotection_spawndelay_initialspawn", s_spawnprotection_spawndelay_default_initialspawn_value))
+        ply:SetNWFloat("s_spawnprotection_initial_spawn", CurTime())
+        ply:SetExpirationDate(CurTime() + GetGlobal2Float("s_spawnprotection_spawndelay_initialspawn", s_spawnprotection_spawndelay_default_initialspawn_value), "INITIALSPAWN")
         return
     end)
 
@@ -313,7 +313,7 @@ hook.Add("player_spawn", "s_spawnprotection", function(data)
         return
     end
 
-    if CurTime() < ply:GetNW2Float("s_spawnprotection_initial_spawn", -99) + InitialSpawnedThreshold then --
+    if CurTime() < ply:GetNWFloat("s_spawnprotection_initial_spawn", -99) + InitialSpawnedThreshold then --
         return
     end
 
@@ -321,7 +321,7 @@ hook.Add("player_spawn", "s_spawnprotection", function(data)
     JustSpawned[ply] = CurTime()
     local SpawnDelay = GetGlobal2Float("s_spawnprotection_spawndelay", s_spawnprotection_spawndelay_default_value)
     local ExpirationDate = CurTime() + SpawnDelay
-    ply:SetExpirationDate(ExpirationDate)
+    ply:SetExpirationDate(ExpirationDate, "PLAYERSPAWN")
     ply.FadingOut = nil
     ply.MovementDecay = nil
     timer.Create("s_spawnprotection_spawndelay" .. data.userid, SpawnDelay, 1, function()
@@ -359,7 +359,7 @@ hook.Add("DoAnimationEvent", "s_spawnprotection", function(ply, event, data)
 end)
 --]]
 hook.Add("PlayerSwitchWeapon", "s_spawnprotection", function(ply, _, _)
-    if CurTime() < ply:GetNW2Float("s_spawnprotection_initial_spawn", -99) + InitialSpawnedThreshold then --
+    if CurTime() < ply:GetNWFloat("s_spawnprotection_initial_spawn", -99) + InitialSpawnedThreshold then --
         return
     end
 
@@ -445,8 +445,8 @@ end)
 if SERVER then
     --[[
     -- just debug / example stuff
-    hook.Add("s_spawnprotection_expiration_date_changed", "s_spawnprotection_debug", function(ply, ExpirationDate)
-        print("Set expiration for " .. ply:Nick() .. " to " .. ExpirationDate - CurTime() .. " seconds from now")
+    hook.Add("s_spawnprotection_expiration_date_changed", "s_spawnprotection_debug", function(ply, ExpirationDate, reason)
+        print("Set expiration for " .. ply:Nick() .. " to " .. ExpirationDate - CurTime() .. " seconds from now, because " .. reason)
         return
     end)
 
