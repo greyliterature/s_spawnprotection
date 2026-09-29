@@ -26,9 +26,11 @@ local Notifications = {
         Meta functions
 ----------------------------------]]
 local PLAYERMETA = FindMetaTable("Player")
+local AlreadyNotifed = {}
 function PLAYERMETA:SetExpirationDate(ExpirationDate, NOTIFYCODE)
-    if NOTIFYCODE and Notifications[NOTIFYCODE] and s_spawnprotection_spawndelay_notifyplayers_value == 1 then --
+    if NOTIFYCODE and Notifications[NOTIFYCODE] and s_spawnprotection_spawndelay_notifyplayers_value == 1 and not AlreadyNotifed[self] then --
         self:ColoredChatPrint(NOTIFYCODE)
+        AlreadyNotifed[self] = true
     end
 
     hook.Run("s_spawnprotection_expiration_date_changed", self, ExpirationDate, NOTIFYCODE or "")
@@ -169,6 +171,17 @@ if CLIENT then
         PlayersOverlayed[ply] = nil
     end)
 
+    local ViewmodelDoubleDraw = false
+    hook.Add("PostDrawViewModel", "s_spawnprotection", function(viewmodel, ply)
+        if ViewmodelDoubleDraw == true then return end
+        if HasSpawnProt(ply) == false then return end
+        ViewmodelDoubleDraw = true
+        render.ModelMaterialOverride(Jellyfish)
+        viewmodel:DrawModel()
+        render.ModelMaterialOverride(nil)
+        ViewmodelDoubleDraw = nil
+    end)
+
     hook.Add("ScalePlayerDamage", "s_spawnprotection", function(ply, _, _)
         if HasSpawnProt(ply) then --
             return true
@@ -283,6 +296,7 @@ elseif SERVER then
 
     local UsedThisLife = {}
     hook.Add("PlayerSpawn", "s_spawnprotection", function(ply, _)
+        AlreadyNotifed[ply] = nil
         UsedThisLife[ply] = nil
         return
     end)
